@@ -1,7 +1,7 @@
 import logging
 import toml
 
-from postgres_to_es.data_classes import AppSettings, ESSettings, PGSettings
+from data_classes import AppSettings, ESSettings, PGSettings
 
 log = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',

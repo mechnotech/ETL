@@ -5,7 +5,8 @@
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python3 postgres_to_es/updater.py
+cd postgres_to_es
+python3 updater.py
 ```
 В папке settings файл **config.toml**
 требуется указать ip-адреса(или алиасы) ваших контейнеров postgres и elasticsearch 
