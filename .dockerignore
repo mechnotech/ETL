@@ -1,0 +1,11 @@
+.idea
+.dockerignore
+.gitignore
+db.sqlite
+files
+images
+venv
+__pycache__/
+README.md
+tasks
+movies_admin/static

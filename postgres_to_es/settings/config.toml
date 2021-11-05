@@ -1,0 +1,43 @@
+[app]
+# В секундах
+await_time=10
+backoff_start_sleep_time=0.05
+backoff_factor=2
+backoff_border_sleep_time=10
+storage_file_path='misc/stats.json'
+
+[postgres]
+DB_NAME='movies'
+POSTGRES_USER='movies'
+POSTGRES_PASSWORD='movies'
+DB_HOST='postgres'
+DB_PORT=5432
+options='-c search_path=content'
+
+bulk_factor=100
+sql_get_oldest_time='SELECT updated_at from content.film_work ORDER BY updated_at;'
+sql_get_new_ids='SELECT id, updated_at from content.film_work WHERE updated_at >= %s ORDER BY updated_at;'
+sql_get_film='''SELECT
+            fw.id as fw_id,
+            fw.title,
+            fw.description,
+            fw.rating,
+            pfw.role,
+            p.id,
+            p.full_name,
+            g.name
+        FROM content.film_work fw
+        LEFT JOIN content.person_film_work pfw ON pfw.film_work_id = fw.id
+        LEFT JOIN content.person p ON p.id = pfw.person_id
+        LEFT JOIN content.genre_film_work gfw ON gfw.film_work_id = fw.id
+        LEFT JOIN content.genre g ON g.id = gfw.genre_id
+        WHERE fw.id = %s;
+        '''
+
+[elasticsearch]
+discovery.type='single-node'
+ES_URL='elasticsearch'
+ES_PORT=9200
+movies_index='movies'
+bulk_factor=50
+default_scheme_file='settings/default_scheme_es.json'
