@@ -71,9 +71,10 @@ class PGConnector:
         self.connection = psycopg2.connect(**dsl, cursor_factory=DictCursor)
         self.cursor = self.connection.cursor()
         self.state = State(JsonFileStorage())
-        self.last_time = None #dt.fromisoformat(self.state.get_state('fw'))
+        self.last_time = None
         self.ids_to_update = []
         self.rows = None
+        self.not_complete = {'fw': True, 'p': True, 'g': True}
 
     # @backoff()
     def get_data(self, execute: str, params=None, size=None):
@@ -108,24 +109,32 @@ class PGConnector:
         self.last_time = dt.fromisoformat('1999-01-01 12:00:00.000001+00:00')
         self.state.set_state('fw', self.last_time)
 
-    def get_new_ids(self):
-        """Получение списка непроиндексированных записей (их uuid и updated_at)"""
-        if len(self.ids_to_update) > 1:
-            return
-        if not self.state.get_state('fw'):  # top?
+    def is_not_complete(self):
+        for _, v in self.not_complete.items():
+            if v:
+                return True
+        return False
+
+    def get_films_ids(self):
+        """Получение списка непроиндексированных записей фильмов (их uuid и updated_at)"""
+        if not self.state.get_state('fw'):
             self.set_start_time()
+        self.last_time = dt.fromisoformat(self.state.get_state('fw'))
         self.get_data(pg_config.sql_get_new_ids, params=[self.last_time, ], size=pg_config.bulk_factor)
         self.ids_to_update = self.rows
+        self.not_complete['fw'] = len(self.rows) != 0
 
-    def next_to_update(self):
-        """Получение списка денормизированных данных для uuid"""
-        for row in self.ids_to_update:
-            self.get_data(pg_config.sql_get_film, params=[row[0]])
-            if self.last_time < row[1]:
-                self.last_time = row[1]
+    def pop_next_to_update(self):
+        """Получение списка денормизированных данных общей таблицы по фильмам для uuid из стека"""
+        while self.ids_to_update:
+            ids, updated_at = self.ids_to_update.pop(0)
+            self.get_data(pg_config.sql_get_film, params=[ids, ])
+            if self.last_time < updated_at:
+                self.last_time = updated_at
             yield self.rows
 
-    def buzz_persons(self):
+    def _push_persons(self):
+        """Выбрать UUID фильмов затронутых изменением person и поместить их в стек обработки"""
         if not self.rows:
             return
         last_time = self.rows[-1][1]
@@ -139,44 +148,58 @@ class PGConnector:
         self.ids_to_update = self.rows
         self.state.set_state('p', last_time)
 
-    def check_persons_and_genres_updates(self):
+    def _push_genres(self):
+        """Выбрать UUID фильмов затронутых изменением genres и поместить их в стек обработки"""
+        if not self.rows:
+            return
+        last_time = self.rows[-1][1]
+        genres_ids = "', '".join([x[0] for x in self.rows])
+        self.get_data(f'''SELECT fw.id, fw.updated_at
+                                FROM content.film_work fw
+                            LEFT JOIN content.genre_film_work pfw ON pfw.film_work_id = fw.id
+                            WHERE pfw.genre_id IN ('{genres_ids}')
+                            ORDER BY fw.updated_at
+                            LIMIT 1000;''')
+        self.ids_to_update = self.rows
+        self.state.set_state('g', last_time)
+
+    def check_persons_updates(self):
+        """Получение списка uuid и updated_at из таблицы person если были изменения
+        """
         persons_last_time = self.state.get_state('p')
         self.get_data(
             f"SELECT id, updated_at FROM content.person WHERE updated_at > '{persons_last_time}'"
             f' order by updated_at DESC'
         )
         if len(self.rows) != 0:
-            self.buzz_persons()
+            self._push_persons()
+        self.not_complete['p'] = len(self.rows) != 0
 
-        # persons_time = self.rows[0][0]
-        # self.state.set_state('p', persons_time)
-        # self.get_data(
-        #     f"SELECT id, updated_at FROM content.genre WHERE updated_at > '{self.last_time}'"
-        #     f' order by updated_at DESC'
-        # )
-        # print(self.rows)
-        # genres_time = self.rows[0][0]
-        # self.state.set_state('g', genres_time)
-        # if self.last_time <= genres_time or self.last_time <= persons_time:
-        #     # вызывай перетрахиватель updated_at в фильмах
-        #     pass
-
-
+    def check_genres_updates(self):
+        """Получение списка uuid и updated_at из таблицы genre если были изменения
+        """
+        genres_last_time = self.state.get_state('g')
+        self.get_data(
+            f"SELECT id, updated_at FROM content.genre WHERE updated_at > '{genres_last_time}'"
+            f' order by updated_at DESC'
+        )
+        if len(self.rows) != 0:
+            self._push_genres()
+        self.not_complete['g'] = len(self.rows) != 0
 
     def __del__(self):
         self.connection.close()
 
+
 def updater(pg, es):
-    while len(pg.ids_to_update) != 0:
-        for data in pg.next_to_update():
-            es.add_to_block(*transformer(data))
-            if len(es.block) >= es_config.bulk_factor:
-                es.last_time = pg.last_time
-                es.load()
-        es.last_time = pg.last_time
-        es.load()
-        pg.ids_to_update.clear()
-        
+    for data in pg.next_to_update():
+        es.add_to_block(*transformer(data))
+        if len(es.block) >= es_config.bulk_factor:
+            es.last_time = pg.last_time
+            es.load()
+    es.last_time = pg.last_time
+    es.load()
+
 
 def never_ending_process():
     es = ESConnector()
@@ -187,16 +210,17 @@ def never_ending_process():
         log.info(f'created index: {result}')
 
     while True:
-
-        pg.get_new_ids()
-        updater(pg=pg, es=es)
-        pg.check_persons_and_genres_updates()
-        updater(pg=pg, es=es)
+        while pg.is_not_complete():
+            pg.get_films_ids()
+            updater(pg=pg, es=es)
+            pg.check_persons_updates()
+            updater(pg=pg, es=es)
+            pg.check_genres_updates()
+            updater(pg=pg, es=es)
 
         log.info(f'Nothing to update, now wait for {app_config.await_time} sec ...')
         time.sleep(app_config.await_time)
-
-
+        pg.not_complete = {'fw': True, 'p': True, 'g': True}
 
 
 if __name__ == '__main__':
