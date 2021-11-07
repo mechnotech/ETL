@@ -5,6 +5,9 @@ backoff_start_sleep_time=0.001
 backoff_factor=2
 backoff_border_sleep_time=10
 storage_file_path='misc/stats.json'
+log_file_path='logs/debug.log'
+log_maxBytes=1000000
+log_backupCount=5
 
 [postgres]
 DB_NAME='movies'
@@ -16,7 +19,23 @@ options='-c search_path=content'
 
 bulk_factor=100
 sql_get_top_time_person='SELECT updated_at from content.person ORDER BY updated_at DESC LIMIT 2;'
-sql_get_top_time_genre='SELECT updated_at from content.genre ORDER BY updated_at DESC LIMIT 1;'
+sql_get_top_time_genre='SELECT updated_at from content.genre ORDER BY updated_at DESC LIMIT 2;'
+sql_push_persons='''SELECT fw.id, fw.updated_at
+                        FROM content.film_work fw
+                    LEFT JOIN content.person_film_work pfw ON pfw.film_work_id = fw.id
+                    WHERE pfw.person_id IN %s
+                    ORDER BY fw.updated_at
+                    LIMIT 1000;'''
+sql_check_persons='''SELECT id, updated_at FROM content.person WHERE updated_at > %s
+           order by updated_at DESC'''
+sql_push_genres='''SELECT fw.id, fw.updated_at
+                                FROM content.film_work fw
+                            LEFT JOIN content.genre_film_work pfw ON pfw.film_work_id = fw.id
+                            WHERE pfw.genre_id IN %s
+                            ORDER BY fw.updated_at
+                            LIMIT 1000;'''
+sql_check_genres='''SELECT id, updated_at FROM content.genre WHERE updated_at > %s
+            order by updated_at DESC'''
 sql_get_new_ids='SELECT id, updated_at from content.film_work WHERE updated_at > %s ORDER BY updated_at;'
 sql_get_film='''SELECT
             fw.id as fw_id,

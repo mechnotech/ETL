@@ -1,13 +1,12 @@
 import abc
 import json
-import logging
 from abc import ABC
 from typing import Any
-from config import app_config
 
-log = logging.getLogger(__name__)
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+from config import app_config
+from logger import log
+
+log = log.getChild(__name__)
 
 
 class BaseStorage:
@@ -75,10 +74,4 @@ class State:
 
 
 if __name__ == '__main__':
-    st = State(JsonFileStorage('deff.json'))
-    st.set_state('a', 1)
-    st.set_state('b', 2)
-    st.set_state('a', 4)
-    print(st.get_state('a'))
-
-
+    pass

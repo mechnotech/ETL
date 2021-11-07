@@ -1,27 +1,22 @@
 import json
-import logging
 import time
-import datetime
 from datetime import datetime as dt
-import pytz
+
 import psycopg2
 from elasticsearch import Elasticsearch
 from psycopg2.extras import DictCursor
 
 from backoff_decorator import backoff
 from config import pg_config, es_config, app_config, dsl, movies_index
+from logger import log
 from storage import State, JsonFileStorage
 from transform import transformer
 
-log = logging.getLogger(__name__)
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
-
-tables = ['fw', 'person', 'genre']
+log = log.getChild(__name__)
 
 
 class ESConnector:
-    # @backoff()
+    @backoff(logy=log.getChild('ESConnector.init'))
     def __init__(self):
         self.connection = Elasticsearch(host=es_config.ES_URL)
         self.connection.cluster.health(wait_for_status='yellow', request_timeout=1)
@@ -29,7 +24,7 @@ class ESConnector:
         self.last_time = None
         self.state = State(JsonFileStorage())
 
-    # @backoff()
+    @backoff(logy=log.getChild('ESConnector.load'))
     def load(self):
         """ Загрузить в ES пачку подготовленных данных и записать в состояния
         время последней строки
@@ -49,12 +44,12 @@ class ESConnector:
         self.block.append(json.dumps(index_row) + '\n' + json.dumps(doc))
 
     @property
-    # @backoff()
+    @backoff(logy=log.getChild('ESConnector.is_index_exist'))
     def is_index_exist(self):
         return self.connection.indices.exists(index=movies_index)
 
     @property
-    # @backoff()
+    @backoff(logy=log.getChild('ESConnector.create_index'))
     def create_index(self):
         with open(es_config.default_scheme_file, 'r') as f:
             self.connection.indices.create(index=movies_index, body=json.load(f))
@@ -66,7 +61,7 @@ class ESConnector:
 
 class PGConnector:
 
-    # @backoff()
+    @backoff(logy=log.getChild('PGConnector.init'))
     def __init__(self):
         self.connection = psycopg2.connect(**dsl, cursor_factory=DictCursor)
         self.cursor = self.connection.cursor()
@@ -76,7 +71,7 @@ class PGConnector:
         self.rows = None
         self.not_complete = {'fw': True, 'p': True, 'g': True}
 
-    # @backoff()
+    @backoff(logy=log.getChild('PGConnector.get_data'))
     def get_data(self, execute: str, params=None, size=None):
         """ Получить данные из Postgres
          : execute SQL запрос
@@ -135,31 +130,19 @@ class PGConnector:
 
     def _push_persons(self):
         """Выбрать UUID фильмов затронутых изменением person и поместить их в стек обработки"""
-        if not self.rows:
-            return
+
         last_time = self.rows[-1][1]
-        person_ids = "', '".join([x[0] for x in self.rows])
-        self.get_data(f'''SELECT fw.id, fw.updated_at
-                        FROM content.film_work fw
-                    LEFT JOIN content.person_film_work pfw ON pfw.film_work_id = fw.id
-                    WHERE pfw.person_id IN ('{person_ids}')
-                    ORDER BY fw.updated_at
-                    LIMIT 1000;''')
+        person_ids = tuple([x[0] for x in self.rows])
+        self.get_data(pg_config.sql_push_persons, params=(person_ids,))
         self.ids_to_update = self.rows
         self.state.set_state('p', last_time)
 
     def _push_genres(self):
         """Выбрать UUID фильмов затронутых изменением genres и поместить их в стек обработки"""
-        if not self.rows:
-            return
+
         last_time = self.rows[-1][1]
-        genres_ids = "', '".join([x[0] for x in self.rows])
-        self.get_data(f'''SELECT fw.id, fw.updated_at
-                                FROM content.film_work fw
-                            LEFT JOIN content.genre_film_work pfw ON pfw.film_work_id = fw.id
-                            WHERE pfw.genre_id IN ('{genres_ids}')
-                            ORDER BY fw.updated_at
-                            LIMIT 1000;''')
+        genres_ids = tuple([x[0] for x in self.rows])
+        self.get_data(pg_config.sql_push_genres, params=(genres_ids,))
         self.ids_to_update = self.rows
         self.state.set_state('g', last_time)
 
@@ -167,10 +150,7 @@ class PGConnector:
         """Получение списка uuid и updated_at из таблицы person если были изменения
         """
         persons_last_time = self.state.get_state('p')
-        self.get_data(
-            f"SELECT id, updated_at FROM content.person WHERE updated_at > '{persons_last_time}'"
-            f' order by updated_at DESC'
-        )
+        self.get_data(pg_config.sql_check_persons, params=(persons_last_time,))
         if len(self.rows) != 0:
             self._push_persons()
         self.not_complete['p'] = len(self.rows) != 0
@@ -179,10 +159,8 @@ class PGConnector:
         """Получение списка uuid и updated_at из таблицы genre если были изменения
         """
         genres_last_time = self.state.get_state('g')
-        self.get_data(
-            f"SELECT id, updated_at FROM content.genre WHERE updated_at > '{genres_last_time}'"
-            f' order by updated_at DESC'
-        )
+        self.get_data(pg_config.sql_check_genres, params=(genres_last_time,))
+
         if len(self.rows) != 0:
             self._push_genres()
         self.not_complete['g'] = len(self.rows) != 0
@@ -192,7 +170,7 @@ class PGConnector:
 
 
 def updater(pg, es):
-    for data in pg.next_to_update():
+    for data in pg.pop_next_to_update():
         es.add_to_block(*transformer(data))
         if len(es.block) >= es_config.bulk_factor:
             es.last_time = pg.last_time

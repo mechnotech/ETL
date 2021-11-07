@@ -1,17 +1,16 @@
-import logging
-from functools import wraps
 import time
-from config import app_config
+from functools import wraps
+from typing import Optional
 
-log = logging.getLogger(__name__)
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+from config import app_config
+from logger import log
 
 
 def backoff(
         start_sleep_time=app_config.backoff_start_sleep_time,
         factor=app_config.backoff_factor,
-        border_sleep_time=app_config.backoff_border_sleep_time
+        border_sleep_time=app_config.backoff_border_sleep_time,
+        logy=Optional[object]
 ):
     """
         Функция для повторного выполнения функции через некоторое время, если возникла ошибка.
@@ -21,11 +20,14 @@ def backoff(
         Формула:
             t = start_sleep_time * 2^(n) if t < border_sleep_time
             t = border_sleep_time if t >= border_sleep_time
+        :param logy: Экзепляр логгера
         :param start_sleep_time: начальное время повтора
         :param factor: во сколько раз нужно увеличить время ожидания
         :param border_sleep_time: граничное время ожидания
         :return: результат выполнения функции
     """
+    if not logy:
+        logy = log.getChild('backoff_some_func')
 
     def my_decorator(f):
 
@@ -40,7 +42,7 @@ def backoff(
                     break
 
                 except Exception:
-                    log.exception(f'Connection failed, reconnection attempt #{counter}, wait time - {t} sec')
+                    logy.exception(f'Connection failed, reconnection attempt #{counter}, wait time - {t} sec')
                     if t < border_sleep_time:
                         t = t * 2 ** factor
                     if t >= border_sleep_time:

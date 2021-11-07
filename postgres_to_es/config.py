@@ -1,11 +1,6 @@
-import logging
 import toml
 
 from data_classes import AppSettings, ESSettings, PGSettings
-
-log = logging.getLogger(__name__)
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
 
 with open('settings/config.toml', 'r') as f:
     config = toml.load(f)

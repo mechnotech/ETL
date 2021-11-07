@@ -1,4 +1,4 @@
-from postgres_to_es.data_classes import MovieRaw
+from data_classes import MovieRaw
 
 
 def _person_formatter(persons: dict) -> list:

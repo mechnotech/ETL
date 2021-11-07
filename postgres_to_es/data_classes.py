@@ -9,6 +9,9 @@ class AppSettings(BaseModel):
     backoff_border_sleep_time: int
     await_time: float
     storage_file_path: str
+    log_file_path: str
+    log_maxBytes: int
+    log_backupCount: int
 
 
 class ESSettings(BaseModel):
@@ -29,6 +32,10 @@ class PGSettings(BaseModel):
     bulk_factor: int
     sql_get_top_time_person: str
     sql_get_top_time_genre: str
+    sql_check_persons: str
+    sql_push_persons: str
+    sql_push_genres: str
+    sql_check_genres: str
     sql_get_new_ids: str
     sql_get_film: str
 
