@@ -27,7 +27,8 @@ class PGSettings(BaseModel):
     DB_PORT: int
     options: str
     bulk_factor: int
-    sql_get_oldest_time: str
+    sql_get_top_time_person: str
+    sql_get_top_time_genre: str
     sql_get_new_ids: str
     sql_get_film: str
 

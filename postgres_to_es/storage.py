@@ -25,8 +25,15 @@ class BaseStorage:
     def save_state(self, state: dict) -> None:
         """Сохранить состояние в постоянное хранилище"""
         self.check_or_create()
+        with open(self.file_path, 'r') as f:
+            file_data = f.read()
+            if not file_data:
+                file_data = state
+            else:
+                file_data = json.loads(file_data)
+                file_data = {**file_data, **state}
         with open(self.file_path, 'w') as f:
-            f.write(json.dumps(state, indent=4, sort_keys=True, default=str))
+            f.write(json.dumps(file_data, indent=4, sort_keys=True, default=str))
 
     @abc.abstractmethod
     def retrieve_state(self):
@@ -59,13 +66,19 @@ class State:
     def __init__(self, storage: JsonFileStorage):
         self.storage = storage
 
-    def set_state(self, value: Any, key='film_work') -> None:
+    def set_state(self, key: str, value: Any, ) -> None:
         self.storage.save_state({key: value})
 
-    def get_state(self, key='film_work') -> Any:
+    def get_state(self, key: str) -> Any:
         res = self.storage.retrieve_state()
         return res.get(key)
 
 
 if __name__ == '__main__':
-    pass
+    st = State(JsonFileStorage('deff.json'))
+    st.set_state('a', 1)
+    st.set_state('b', 2)
+    st.set_state('a', 4)
+    print(st.get_state('a'))
+
+

@@ -1,7 +1,9 @@
 import json
 import logging
 import time
-
+import datetime
+from datetime import datetime as dt
+import pytz
 import psycopg2
 from elasticsearch import Elasticsearch
 from psycopg2.extras import DictCursor
@@ -15,9 +17,11 @@ log = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
 
+tables = ['fw', 'person', 'genre']
+
 
 class ESConnector:
-    @backoff()
+    # @backoff()
     def __init__(self):
         self.connection = Elasticsearch(host=es_config.ES_URL)
         self.connection.cluster.health(wait_for_status='yellow', request_timeout=1)
@@ -25,7 +29,7 @@ class ESConnector:
         self.last_time = None
         self.state = State(JsonFileStorage())
 
-    @backoff()
+    # @backoff()
     def load(self):
         """ Загрузить в ES пачку подготовленных данных и записать в состояния
         время последней строки
@@ -38,19 +42,19 @@ class ESConnector:
         if not res:
             log.info(f'Add block of {len(self.block)} records')
             self.block.clear()
-            self.state.set_state(value=self.last_time)
+            self.state.set_state('fw', self.last_time)
 
     def add_to_block(self, doc: dict, uuid: str):
         index_row = {"index": {"_index": "movies", "_id": f"{uuid}"}}
         self.block.append(json.dumps(index_row) + '\n' + json.dumps(doc))
 
     @property
-    @backoff()
+    # @backoff()
     def is_index_exist(self):
         return self.connection.indices.exists(index=movies_index)
 
     @property
-    @backoff()
+    # @backoff()
     def create_index(self):
         with open(es_config.default_scheme_file, 'r') as f:
             self.connection.indices.create(index=movies_index, body=json.load(f))
@@ -62,16 +66,16 @@ class ESConnector:
 
 class PGConnector:
 
-    @backoff()
+    # @backoff()
     def __init__(self):
         self.connection = psycopg2.connect(**dsl, cursor_factory=DictCursor)
         self.cursor = self.connection.cursor()
         self.state = State(JsonFileStorage())
-        self.last_time = self.state.get_state()
-        self.ids_to_update = None
+        self.last_time = None #dt.fromisoformat(self.state.get_state('fw'))
+        self.ids_to_update = []
         self.rows = None
 
-    @backoff()
+    # @backoff()
     def get_data(self, execute: str, params=None, size=None):
         """ Получить данные из Postgres
          : execute SQL запрос
@@ -89,32 +93,90 @@ class PGConnector:
         else:
             self.rows = self.cursor.fetchall()
 
-    def get_oldest_time(self):
+    def set_start_time(self):
         """
-        Если модуль запущен в первый раз, получает самую старую запись и устанавливает
-        состояние на неё
+        Если модуль запущен в первый раз:
+        1) Устанавливает топ времени для таблиц p - person и g - genre
+        2) Устанавливает теоретическую дату начала времен кинотеатра для таблицы fw - film_works
         """
-        self.get_data(pg_config.sql_get_oldest_time, size=1)
-        self.last_time = self.rows[0][0]
-        self.state.set_state(value=self.last_time)
+        self.get_data(pg_config.sql_get_top_time_person, size=1)
+        p_time = self.rows[0][0]
+        self.state.set_state('p', p_time)
+        self.get_data(pg_config.sql_get_top_time_genre, size=1)
+        g_time = self.rows[0][0]
+        self.state.set_state('g', g_time)
+        self.last_time = dt.fromisoformat('1999-01-01 12:00:00.000001+00:00')
+        self.state.set_state('fw', self.last_time)
 
     def get_new_ids(self):
         """Получение списка непроиндексированных записей (их uuid и updated_at)"""
-        if not self.state.get_state():
-            self.get_oldest_time()
-        self.get_data(pg_config.sql_get_new_ids, params=[self.last_time, ])
+        if len(self.ids_to_update) > 1:
+            return
+        if not self.state.get_state('fw'):  # top?
+            self.set_start_time()
+        self.get_data(pg_config.sql_get_new_ids, params=[self.last_time, ], size=pg_config.bulk_factor)
         self.ids_to_update = self.rows
 
     def next_to_update(self):
         """Получение списка денормизированных данных для uuid"""
         for row in self.ids_to_update:
             self.get_data(pg_config.sql_get_film, params=[row[0]])
-            self.last_time = row[1]
+            if self.last_time < row[1]:
+                self.last_time = row[1]
             yield self.rows
+
+    def buzz_persons(self):
+        if not self.rows:
+            return
+        last_time = self.rows[-1][1]
+        person_ids = "', '".join([x[0] for x in self.rows])
+        self.get_data(f'''SELECT fw.id, fw.updated_at
+                        FROM content.film_work fw
+                    LEFT JOIN content.person_film_work pfw ON pfw.film_work_id = fw.id
+                    WHERE pfw.person_id IN ('{person_ids}')
+                    ORDER BY fw.updated_at
+                    LIMIT 1000;''')
+        self.ids_to_update = self.rows
+        self.state.set_state('p', last_time)
+
+    def check_persons_and_genres_updates(self):
+        persons_last_time = self.state.get_state('p')
+        self.get_data(
+            f"SELECT id, updated_at FROM content.person WHERE updated_at > '{persons_last_time}'"
+            f' order by updated_at DESC'
+        )
+        if len(self.rows) != 0:
+            self.buzz_persons()
+
+        # persons_time = self.rows[0][0]
+        # self.state.set_state('p', persons_time)
+        # self.get_data(
+        #     f"SELECT id, updated_at FROM content.genre WHERE updated_at > '{self.last_time}'"
+        #     f' order by updated_at DESC'
+        # )
+        # print(self.rows)
+        # genres_time = self.rows[0][0]
+        # self.state.set_state('g', genres_time)
+        # if self.last_time <= genres_time or self.last_time <= persons_time:
+        #     # вызывай перетрахиватель updated_at в фильмах
+        #     pass
+
+
 
     def __del__(self):
         self.connection.close()
 
+def updater(pg, es):
+    while len(pg.ids_to_update) != 0:
+        for data in pg.next_to_update():
+            es.add_to_block(*transformer(data))
+            if len(es.block) >= es_config.bulk_factor:
+                es.last_time = pg.last_time
+                es.load()
+        es.last_time = pg.last_time
+        es.load()
+        pg.ids_to_update.clear()
+        
 
 def never_ending_process():
     es = ESConnector()
@@ -127,17 +189,14 @@ def never_ending_process():
     while True:
 
         pg.get_new_ids()
-        if len(pg.ids_to_update) != 1:
-            for data in pg.next_to_update():
-                es.add_to_block(*transformer(data))
-                if len(es.block) >= es_config.bulk_factor:
-                    es.last_time = pg.last_time
-                    es.load()
-            es.last_time = pg.last_time
-            es.load()
+        updater(pg=pg, es=es)
+        pg.check_persons_and_genres_updates()
+        updater(pg=pg, es=es)
 
         log.info(f'Nothing to update, now wait for {app_config.await_time} sec ...')
         time.sleep(app_config.await_time)
+
+
 
 
 if __name__ == '__main__':

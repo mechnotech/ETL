@@ -1,7 +1,7 @@
 [app]
 # В секундах
 await_time=10
-backoff_start_sleep_time=0.05
+backoff_start_sleep_time=0.001
 backoff_factor=2
 backoff_border_sleep_time=10
 storage_file_path='misc/stats.json'
@@ -15,8 +15,9 @@ DB_PORT=5432
 options='-c search_path=content'
 
 bulk_factor=100
-sql_get_oldest_time='SELECT updated_at from content.film_work ORDER BY updated_at;'
-sql_get_new_ids='SELECT id, updated_at from content.film_work WHERE updated_at >= %s ORDER BY updated_at;'
+sql_get_top_time_person='SELECT updated_at from content.person ORDER BY updated_at DESC LIMIT 2;'
+sql_get_top_time_genre='SELECT updated_at from content.genre ORDER BY updated_at DESC LIMIT 1;'
+sql_get_new_ids='SELECT id, updated_at from content.film_work WHERE updated_at > %s ORDER BY updated_at;'
 sql_get_film='''SELECT
             fw.id as fw_id,
             fw.title,
