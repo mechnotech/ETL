@@ -38,6 +38,8 @@ class ESConnector:
             log.info(f'Add block of {len(self.block)} records')
             self.block.clear()
             self.state.set_state('fw', self.last_time)
+        else:
+            print(res)
 
     def add_to_block(self, doc: dict, uuid: str):
         index_row = {"index": {"_index": "movies", "_id": f"{uuid}"}}

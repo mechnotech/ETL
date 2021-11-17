@@ -11,7 +11,7 @@ file_handler = logging.handlers.RotatingFileHandler(
     backupCount=app_config.log_backupCount
 )
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+ch.setLevel(logging.DEBUG)
 fmtstr = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 fmtdate = '%H:%M:%S'
 formatter = logging.Formatter(fmtstr, fmtdate)

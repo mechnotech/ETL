@@ -45,7 +45,8 @@ sql_get_film='''SELECT
             pfw.role,
             p.id,
             p.full_name,
-            g.name
+            g.name,
+            g.id
         FROM content.film_work fw
         LEFT JOIN content.person_film_work pfw ON pfw.film_work_id = fw.id
         LEFT JOIN content.person p ON p.id = pfw.person_id

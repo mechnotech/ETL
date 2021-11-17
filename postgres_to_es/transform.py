@@ -2,9 +2,12 @@ from data_classes import MovieRaw
 
 
 def _person_formatter(persons: dict) -> list:
-    output = [{'id': k, 'name': v} for k, v in persons.items()]
+    output = [{'uuid': k, 'full_name': v} for k, v in persons.items()]
     return output
 
+def _genre_formatter(genres: dict) -> list:
+    output = [{'uuid': k, 'name': v} for k, v in genres.items()]
+    return output
 
 def transformer(movie_to_transform: list) -> tuple:
     """
@@ -18,13 +21,17 @@ def transformer(movie_to_transform: list) -> tuple:
     writer_names = set()
     actors = dict()
     writers = dict()
+    directors = dict()
+    genres = dict()
 
     for row in movie_to_transform:
 
         data = MovieRaw(*row)
-
+        genre.add(data.genre)
+        genres[data.genre_id] = data.genre
         if data.role == 'director':
             director.add(data.person_name)
+            directors[data.person_id] = data.person_id
         elif data.role == 'writer':
             writer_names.add(data.person_name)
             writers[data.person_id] = data.person_name
@@ -40,7 +47,7 @@ def transformer(movie_to_transform: list) -> tuple:
     doc = {
         'id': data.uuid,
         'imdb_rating': data.imdb_rating,
-        'genre': genre,
+        'genre': _genre_formatter(genres),
         'title': data.title,
         'description': data.description,
         'director': director,
@@ -48,6 +55,7 @@ def transformer(movie_to_transform: list) -> tuple:
         'writers_names': writer_names,
         'actors': _person_formatter(actors),
         'writers': _person_formatter(writers),
+        'directors': _person_formatter(directors)
 
     }
     return doc, data.uuid

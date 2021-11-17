@@ -43,7 +43,7 @@ class PGSettings(BaseModel):
 @dataclass
 class MovieRaw:
     __slots__ = (
-        'uuid', 'title', 'description', 'imdb_rating', 'role', 'person_id', 'person_name', 'genre',
+        'uuid', 'title', 'description', 'imdb_rating', 'role', 'person_id', 'person_name', 'genre', 'genre_id'
     )
     uuid: str
     title: str
@@ -53,3 +53,4 @@ class MovieRaw:
     person_id: str
     person_name: str
     genre: str
+    genre_id: str
