@@ -60,5 +60,7 @@ discovery.type='single-node'
 ES_URL='elasticsearch'
 ES_PORT=9200
 movies_index='movies'
+genre_index='genres'
 bulk_factor=50
 default_scheme_file='settings/default_scheme_es.json'
+genres_scheme_file='settings/genre_scheme_es.json'

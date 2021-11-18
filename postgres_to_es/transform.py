@@ -1,13 +1,25 @@
-from data_classes import MovieRaw
+from data_classes import MovieRaw, GenreRaw
 
 
 def _person_formatter(persons: dict) -> list:
     output = [{'uuid': k, 'full_name': v} for k, v in persons.items()]
     return output
 
+
 def _genre_formatter(genres: dict) -> list:
     output = [{'uuid': k, 'name': v} for k, v in genres.items()]
     return output
+
+
+def genres_transformer(genre_to_transform):
+    data = GenreRaw(*genre_to_transform)
+    doc = {
+        'id': data.uuid,
+        'name': data.name,
+        'description': data.description,
+    }
+    return doc, data.uuid
+
 
 def transformer(movie_to_transform: list) -> tuple:
     """

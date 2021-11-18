@@ -7,7 +7,7 @@ from elasticsearch import Elasticsearch
 from psycopg2.extras import DictCursor
 
 from backoff_decorator import backoff
-from config import pg_config, es_config, app_config, dsl, movies_index
+from config import pg_config, es_config, app_config, dsl, movies_index, genre_index
 from logger import log
 from storage import State, JsonFileStorage
 from transform import transformer
@@ -45,17 +45,16 @@ class ESConnector:
         index_row = {"index": {"_index": "movies", "_id": f"{uuid}"}}
         self.block.append(json.dumps(index_row) + '\n' + json.dumps(doc))
 
-    @property
     @backoff(logy=log.getChild('ESConnector.is_index_exist'))
-    def is_index_exist(self):
-        return self.connection.indices.exists(index=movies_index)
+    def is_index_exist(self, index: str):
+        return self.connection.indices.exists(index=index)
 
-    @property
     @backoff(logy=log.getChild('ESConnector.create_index'))
-    def create_index(self):
-        with open(es_config.default_scheme_file, 'r') as f:
-            self.connection.indices.create(index=movies_index, body=json.load(f))
-        return self.connection.indices.get(index=movies_index)
+    def create_indexes(self, index: str, file_name: str):
+
+        with open(file_name, 'r') as f:
+            self.connection.indices.create(index=index, body=json.load(f))
+            return self.connection.indices.get(index=index)
 
     def __del__(self):
         self.connection.close()
@@ -69,8 +68,8 @@ class PGConnector:
         self.cursor = self.connection.cursor()
         self.state = State(JsonFileStorage())
         self.last_time = None
-        self.ids_to_update = []
         self.rows = None
+        self.genres_to_update = []
         self.not_complete = {'fw': True, 'p': True, 'g': True}
 
     @backoff(logy=log.getChild('PGConnector.get_data'))
@@ -184,10 +183,15 @@ def updater(pg, es):
 def never_ending_process():
     es = ESConnector()
     pg = PGConnector()
+    indexes_files = {
+        movies_index: es_config.default_scheme_file,
+        genre_index: es_config.genres_scheme_file,
+    }
 
-    if not es.is_index_exist:
-        result = es.create_index
-        log.info(f'created index: {result}')
+    for index, file in indexes_files.items():
+        if not es.is_index_exist(index):
+            result = es.create_indexes(index, file)
+            log.info(f'created index: {result}')
 
     while True:
         while pg.is_not_complete():

@@ -18,8 +18,10 @@ class ESSettings(BaseModel):
     ES_URL: str
     ES_PORT: int
     movies_index: str
+    genre_index: str
     bulk_factor: int
     default_scheme_file: str
+    genres_scheme_file: str
 
 
 class PGSettings(BaseModel):
@@ -54,3 +56,13 @@ class MovieRaw:
     person_name: str
     genre: str
     genre_id: str
+
+
+@dataclass
+class GenreRaw:
+    __slots__ = (
+        'uuid', 'name', 'description'
+    )
+    uuid: str
+    name: str
+    description: str
