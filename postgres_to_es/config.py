@@ -9,6 +9,7 @@ with open('settings/config.toml', 'r') as f:
     app_config = AppSettings.parse_obj(config['app'])
     movies_index = es_config.movies_index
     genre_index = es_config.genre_index
+    person_index = es_config.person_index
     dsl = {
         'dbname': pg_config.DB_NAME,
         'user': pg_config.POSTGRES_USER,

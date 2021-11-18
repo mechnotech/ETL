@@ -1,4 +1,4 @@
-from data_classes import MovieRaw, GenreRaw
+from data_classes import MovieRaw, GenreRaw, PersonRaw
 
 
 def _person_formatter(persons: dict) -> list:
@@ -17,6 +17,16 @@ def genres_transformer(genre_to_transform):
         'id': data.uuid,
         'name': data.name,
         'description': data.description,
+    }
+    return doc, data.uuid
+
+
+def person_transformer(person_to_transform):
+    data = PersonRaw(*person_to_transform)
+    doc = {
+        'id': data.uuid,
+        'full_name': data.full_name,
+        'birthday': data.birthday,
     }
     return doc, data.uuid
 

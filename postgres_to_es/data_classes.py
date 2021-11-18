@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -19,9 +21,11 @@ class ESSettings(BaseModel):
     ES_PORT: int
     movies_index: str
     genre_index: str
+    person_index: str
     bulk_factor: int
     default_scheme_file: str
     genres_scheme_file: str
+    persons_scheme_file: str
 
 
 class PGSettings(BaseModel):
@@ -61,8 +65,20 @@ class MovieRaw:
 @dataclass
 class GenreRaw:
     __slots__ = (
-        'uuid', 'name', 'description'
+        'uuid', 'name', 'description', 'updated_at'
     )
     uuid: str
     name: str
     description: str
+    updated_at: str
+
+
+@dataclass
+class PersonRaw:
+    __slots__ = (
+        'uuid', 'full_name', 'birthday', 'updated_at'
+    )
+    uuid: str
+    full_name: str
+    birthday: str
+    updated_at: Optional[datetime.date]
