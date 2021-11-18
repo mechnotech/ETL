@@ -6,7 +6,7 @@ from datetime import datetime as dt
 from config import es_config, app_config, genre_index, person_index
 from logger import log
 from backoff_decorator import backoff
-from updater import ESConnector, PGConnector
+from connectors import ESConnector, PGConnector
 from storage import State, JsonFileStorage
 from transform import genres_transformer, person_transformer
 
@@ -137,5 +137,4 @@ def side_check():
     pg.check_persons_updates()
     person_updater(pg=pg, es=es)
 
-    log.info(f'Nothing to update, now wait for {app_config.await_time} sec ...')
-    time.sleep(app_config.await_time)
+    log.info(f'Persons and Genres moved to ES, no new data yet...')

@@ -1,7 +1,7 @@
 [app]
 # В секундах
 await_time=10
-backoff_start_sleep_time=0.001
+backoff_start_sleep_time=0.05
 backoff_factor=2
 backoff_border_sleep_time=10
 storage_file_path='misc/stats.json'
