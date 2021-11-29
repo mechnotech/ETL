@@ -8,6 +8,7 @@ from psycopg2.extras import DictCursor
 from backoff_decorator import backoff
 from config import pg_config, es_config, dsl, movies_index
 from logger import log
+from make_fixtures import movies_fixtures
 from storage import State, JsonFileStorage
 
 
@@ -29,6 +30,7 @@ class ESConnector:
         if not self.block:
             return
         body = '\n'.join(self.block)
+        movies_fixtures(self.block)
         res = self.connection.bulk(body=body, index=movies_index, params={'filter_path': 'items.*.error'})
         if not res:
             log.info(f'Add block of {len(self.block)} records')

@@ -7,6 +7,7 @@ from config import es_config, app_config, genre_index, person_index
 from logger import log
 from backoff_decorator import backoff
 from connectors import ESConnector, PGConnector
+from postgres_to_es.make_fixtures import persons_fixtures, genres_fixtures
 from storage import State, JsonFileStorage
 from transform import genres_transformer, person_transformer
 
@@ -27,6 +28,10 @@ class SideESConnector(ESConnector):
         if not self.block:
             return
         body = '\n'.join(self.block)
+        if index == person_index:
+            persons_fixtures(self.block)
+        if index == genre_index:
+            genres_fixtures(self.block)
         res = self.connection.bulk(body=body, index=index, params={'filter_path': 'items.*.error'})
         if not res:
             log.info(f'Add block to index:{index} of {len(self.block)} records')

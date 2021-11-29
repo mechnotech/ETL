@@ -1,7 +1,7 @@
 [app]
 # В секундах
 await_time=10
-backoff_start_sleep_time=0.05
+backoff_start_sleep_time=0.005
 backoff_factor=2
 backoff_border_sleep_time=10
 storage_file_path='misc/stats.json'
@@ -62,7 +62,7 @@ ES_PORT=9200
 movies_index='movies'
 genre_index='genres'
 person_index='persons'
-bulk_factor=50
+bulk_factor=100
 default_scheme_file='settings/default_scheme_es.json'
 genres_scheme_file='settings/genre_scheme_es.json'
 persons_scheme_file='settings/person_scheme_es.json'
